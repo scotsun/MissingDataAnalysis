@@ -47,7 +47,7 @@ latent_rSq_to_logistic_scale <- function(gamma, rSq, df) {
 
 generate_completeness <- function(gamma0, gamma, df, s) {
   n <- dim(df)[1]
-  # latent variable (sigmoid) in LGR
+  # latent variable (sigmoid + gamma0) in LGR
   sigmoid <- gamma[1]*df$x + gamma[2]*df$y + rlogis(n, location = 0, scale = s)
   completeness <- (sigmoid > -gamma0)
   return(completeness)
@@ -64,16 +64,33 @@ generate_ods_data <- function(df, completeness) {
 
 pr_observe <- function(completeness, data) {
   n <- dim(data)[1]
-  lgr <- glm(completeness ~ data$y + data$x, family = "binomial", maxit=200) #TODO:
+  lgr <- glm(completeness ~ data$y + data$x, family = "binomial", maxit=200)
   lgr.coef <- coef(lgr)
   data.mat <- c(rep(1, n), data$y, data$x) %>%
     matrix(nrow = nrow(data), ncol = ncol(data))
   return(exp(data.mat %*% lgr.coef) / (1 + exp(data.mat %*% lgr.coef)))
 }
 
-IPW <- function(model, data) {
+truncate <- function(pr, lower_bd, upper_bd) {
+  for (i in 1:length(pr)) {
+    if (pr[i] < lower_bd) {
+      pr[i] <- lower_bd
+    } else if (pr[i] > upper_bd) {
+      pr[i] <- upper_bd
+    } else {
+      next
+    }
+  }
+  return(pr)
+}
+
+IPW <- function(model, data, truncate_weight = FALSE, truncate_bounds = NULL) {
+  pr <- pr_observe(as.integer(complete.cases(data)), data)
+  if (truncate_weight) {
+    pr <- truncate(pr, lower_bd = truncate_bounds[1], upper_bd = truncate_bounds[2])
+  }
   ipw <- lm(y ~ x + z, data, 
-            weights = 1/pr_observe(as.integer(complete.cases(data)), data))
+            weights = 1/pr)
   ipw.coef <- ipw %>% 
     coefficients() %>% 
     unname()

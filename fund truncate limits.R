@@ -8,14 +8,14 @@ pb <- progress_bar$new(
 n <- 100
 beta0 <- 0
 beta <- c(0.5, 1)
-gamma0 <- 1 
+gamma0 <- 1
 gamma <- c(1, 1)
-phi <- 1
+phi <- 5
 theta <- 0.4
 
-#TODO: tuning parameters
-rSq_theoretical <- 0.9  # used to generate sigma 
-rSq_latent <- 0.3       # used to generate scale
+#tuning parameters
+rSq_theoretical <- 0.90  # used to generate sigma 
+rSq_latent <- 0.60      # used to generate scale
 
 sigma <- theory_rSq_to_sigma(beta, phi, theta, rSq_theoretical)
 
@@ -47,7 +47,6 @@ ggplot(data = pr_bounds) +
 pr_bounds %>%
   summarise(
     across(everything(), list(
-      mean = mean, 
       p025 = ~quantile(., 0.025),
       p975 = ~quantile(., 0.975))
       )

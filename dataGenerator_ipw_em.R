@@ -14,7 +14,7 @@ theory_rSq_to_sigma <- function(beta, phi, theta, rSq) {
                          0, theta*(1-theta)), 
                        byrow = TRUE, nrow = 2, ncol = 2)
   var_explained <- t(beta) %*% var_matrix %*% beta
-  return(sqrt(var_explained * (1 - rSq)/rSq))
+  return(drop(sqrt(var_explained * (1 - rSq)/rSq)))
 }
 
 generate_full_data <- function(beta0, beta, phi, theta, sigma, n, misspecified = FALSE) {
@@ -26,7 +26,7 @@ generate_full_data <- function(beta0, beta, phi, theta, sigma, n, misspecified =
   } else {
     y <- beta0 + beta[1]*x + beta[2]*z + epsilon
   }
-  df <- data.frame(x = x, z = z, y = y)
+  df <- data.frame(x = x, z = as.character(z), y = y)
   return(df)
 }
 
@@ -49,7 +49,7 @@ generate_completeness <- function(gamma0, gamma, df, s) {
   n <- dim(df)[1]
   # latent variable (sigmoid + gamma0) in LGR
   sigmoid <- gamma[1]*df$x + gamma[2]*df$y + rlogis(n, location = 0, scale = s)
-  completeness <- (sigmoid > -gamma0)
+  completeness <- (sigmoid > -gamma0 + 0)
   return(completeness)
 }
 
@@ -101,13 +101,18 @@ IPW <- function(model, data, truncate_weight = FALSE, truncate_bounds = NULL) {
 # IPW Inference
 ###############################
 
-IPW_se <- function(model, data) {
+IPW_se <- function(model, data, truncate_weight = FALSE, truncate_bounds = NULL) {
+  pr <- pr_observe(as.integer(complete.cases(data)), data)
+  if (truncate_weight) {
+    pr <- truncate(pr, lower_bd = truncate_bounds[1], upper_bd = truncate_bounds[2])
+  }
   ipw <- lm(y ~ x + z, data, 
-            weights = 1/pr_observe(as.integer(complete.cases(data)), data))
+            weights = 1/pr)
   ipw.se <- ipw %>%
     vcov() %>%
     diag() %>%
-    sqrt()
+    sqrt() %>% 
+    unname()
   return(ipw.se)
 }
 
@@ -122,49 +127,47 @@ get_initial_estimate <- function(data) {
   return(c(theta_hat, sigma_hat, beta_hat))
 }
 
-EM <- function(tolerance, data, verbose, report_allparam) {
+EM <- function(data, tolerance = 1e-6, max_iter = 1000, verbose = FALSE, report_allparam = FALSE) {
   # augmented data used to update beta's
   augm_data <- augmented_data(data) 
-  # since they are constant through out the process, so take it to the beginning
-  n <- nrow(data)
-  
   # preprocess the data and split them into 2 sets
   data$z <- as.numeric(data$z)
   data.R <- data[complete.cases(data),]
   data.R_bar <- data[!complete.cases(data),]
-  num_cc <- nrow(data.R)
+  # since they are constant through out the process, so take it to the beginning
+  n <- nrow(data)
+  n_cc <- nrow(data.R)
   
   estimate <- get_initial_estimate(data)
-  phi_prime <- conditional_phi(estimate, data)
-  Q_current <- 0
-  Q_next <- Q(estimate, phi_prime, data.R, data.R_bar)
-  iter <- 0
-  while (abs(Q_current - Q_next) > tolerance) {
-    iter <- iter + 1
-    Q_current <- Q_next
-    
+  for (iter in 1:max_iter) {
+    phi_prime <- conditional_phi(estimate, data)
+    # to update theta
     A_ <- A(phi_prime, data.R)
     B_ <- B(phi_prime, data.R)
-    
-    n <- nrow(data)
-    num_cc <- nrow(data.R)
-    reg_coef <- lm(y ~ x + z, data = augm_data, weights = w(num_cc, phi_prime)) %>% 
+    # to update beta
+    reg_coef <- lm(y ~ x + z, 
+                   data = augm_data, 
+                   weights = augment_weight(n_cc, phi_prime)) %>% 
       coef() %>% unname()
-    
+    # to update sigma
     S_ <- S(reg_coef, phi_prime, data.R, data.R_bar)
-    
-    estimate <- c(A_ / (A_ + B_), # theta
-                  sqrt(S_/n),     # sigma
-                  reg_coef)       # beta's
-    
+    #
+    estimate_next <- c(A_ / (A_ + B_), # theta
+                       sqrt(S_/n),     # sigma
+                       reg_coef)       # beta's
+    # check convergence
+    check <- max(abs(estimate_next - estimate))
+    if (check < tolerance) {
+      estimate <- estimate_next
+      break
+    }
+    phi_prime <- conditional_phi(estimate_next, data)
+    estimate <- estimate_next
+    # verbose print
     if (verbose) {
       print(paste0("num of iter:", iter))
       print(estimate)
     }
-    
-    phi_prime <- conditional_phi(estimate, data.R_bar)
-    
-    Q_next <- Q(estimate, phi_prime, data.R, data.R_bar)
   }
   if (report_allparam) {
     return(list(estimate_theta = estimate[1], 
@@ -176,29 +179,17 @@ EM <- function(tolerance, data, verbose, report_allparam) {
 
 conditional_phi <- function(estimate, data) {
   data.R_bar <- data[!complete.cases(data), ]
+  
   theta <- estimate[1]
   sigma <- estimate[2]
-  beta0 <- estimate[3]
-  beta1 <- estimate[4]
-  beta2 <- estimate[5]
-  f1 <- dnorm(data.R_bar$y, mean = beta0 + beta1 * data.R_bar$x + beta2, sd = sigma) * theta
-  f2 <- dnorm(data.R_bar$y, mean = beta0 + beta1 * data.R_bar$x, sd = sigma) * (1 - theta)
-  return(f1 / (f1 + f2))
-}
-
-Q <- function(estimate, phi_prime, data.R, data.R_bar) {
-  theta <- estimate[1]
-  sigma <- estimate[2]
-  beta0 <- estimate[3]
-  beta1 <- estimate[4]
-  beta2 <- estimate[5]
-  return(
-    sum(dnorm(data.R$y, mean = beta0 + beta1 * data.R$x + beta2*as.integer(data.R$z), sd = sigma, log = TRUE)) +
-      sum(dbinom(data.R$z, 1, prob = theta, log = TRUE)) +
-      sum(dnorm(data.R_bar$y, mean = beta0 + beta1 * data.R_bar$x, sd = sigma, log = TRUE) * (1 - phi_prime)) +
-      sum(dnorm(data.R_bar$y, mean = beta0 + beta1 * data.R_bar$x + beta2, sd = sigma, log = TRUE) * phi_prime) +
-      sum((phi_prime * log(theta) + (1 - phi_prime) * log(1 - theta)))
-  )
+  beta <- estimate[3:length(estimate)]
+  
+  mu0 <- drop(cbind(1, data.R_bar$x, 0) %*% beta)
+  mu1 <- drop(cbind(1, data.R_bar$x, 1) %*% beta)
+  
+  f0 <- dnorm(data.R_bar$y, mean = mu0, sd = sigma)
+  f1 <- dnorm(data.R_bar$y, mean = mu1, sd = sigma)
+  return( (f1 * theta) / (f1 * theta + f0 * (1 - theta)))
 }
 
 A <- function(phi_prime, data.R) {
@@ -210,29 +201,27 @@ B <- function(phi_prime, data.R) {
 }
 
 S <- function(estimate_beta, phi_prime, data.R, data.R_bar) {
-  beta0 <- estimate_beta[1]
-  beta1 <- estimate_beta[2]
-  beta2 <- estimate_beta[3]
+  X.R <- cbind(1, data.R$x, data.R$z)
+  X.R_bar <- cbind(1, data.R_bar$x)
   return(
-    sum((data.R$y - beta0 - beta1*data.R$x - beta2*data.R$z)^2) + 
-      sum(((data.R_bar$y - beta0 - beta1*data.R_bar$x - beta2)*phi_prime)^2) +
-      sum(((data.R_bar$y - beta0 - beta1*data.R_bar$x - beta2)*(1 - phi_prime))^2)
+    sum((data.R$y - X.R %*% estimate_beta)^2) + 
+      sum((data.R_bar$y - cbind(X.R_bar, 1) %*% estimate_beta)^2 * phi_prime) +
+      sum((data.R_bar$y - cbind(X.R_bar, 0) %*% estimate_beta)^2 * (1 - phi_prime))
   )
 }
 
 augmented_data <- function(data) {
-  cat_idx <- which(data %>% sapply(class) =="character") %>% unname()
   data.R <- data[complete.cases(data),]
   data.R_bar_1 <- data[!complete.cases(data),]
   data.R_bar_0 <- data[!complete.cases(data),]
-  for (i in cat_idx) {
-    data.R_bar_1[[i]] <- '1'
-    data.R_bar_0[[i]] <- '0'
-  }
-  return(bind_rows(data.R, data.R_bar_1, data.R_bar_0))
+  
+  data.R_bar_1$z <- '1'
+  data.R_bar_0$z <- '0'
+  
+  return(rbind(data.R, data.R_bar_1, data.R_bar_0))
 }
 
-w <- function(num_cc, phi_prime) {
+augment_weight <- function(num_cc, phi_prime) {
   return(
     c(rep(1, num_cc), phi_prime, 1 - phi_prime)
     )
@@ -245,24 +234,27 @@ w <- function(num_cc, phi_prime) {
 f_j <- function(data, j, estimate_beta, estimate_sigma) {
   y <- data$y
   X <- cbind(1, data$x, j)
-  return(dnorm(y, mean = X %*% estimate_beta, sd = estimate_sigma))
+  y.mu <- drop(X %*% estimate_beta)
+  return(dnorm(y, mean = y.mu, sd = estimate_sigma))
 }
 
 f_j_partial_sigma2 <- function(data, j, estimate_beta, estimate_sigma) {
   y <- data$y
   X <- cbind(1, data$x, j)
-  f_j_ <- dnorm(y, mean = X %*% estimate_beta, sd = estimate_sigma)
+  y.mu <- drop(X %*% estimate_beta)
+  f_j_ <- dnorm(y, mean = y.mu, sd = estimate_sigma)
   return(
-    as.vector((-1/(2*estimate_sigma^2) + (y - X %*% estimate_beta)^2/(2*estimate_sigma^4)) * f_j_)
+    (-1/(2*estimate_sigma^2) + (y - y.mu)^2/(2*estimate_sigma^4)) * f_j_
   )
 }
 
 f_j_partial_beta <- function(data, j, estimate_beta, estimate_sigma) {
   y <- data$y
   X <- cbind(1, data$x, j)
-  f_j_ <- dnorm(y, mean = X %*% estimate_beta, sd = estimate_sigma)
+  y.mu <- drop(X %*% estimate_beta)
+  f_j_ <- dnorm(y, mean = y.mu, sd = estimate_sigma)
   return(
-    unname(as.vector(1/estimate_sigma^2 * (y - X %*% estimate_beta) * f_j_) * X)
+    (1/estimate_sigma^2 * (y - y.mu) * f_j_) * X
   )
 }
 
@@ -287,18 +279,26 @@ fisher_score <- function(data, estimate) {
   f1_partial_beta <- f_j_partial_beta(data, 1, estimate_beta, estimate_sigma)
   log_g_partial_beta <- ((1 - estimate_theta) * f0_partial_beta + estimate_theta * f1_partial_beta)/g
   
+  # initialization
   partial_theta <- D/g
   partial_sigma2 <- log_g_partial_sigma2
   partial_beta <- log_g_partial_beta
-  
+  # summation
   for (i in 1:length(is_complete)) {
     if (is_complete[i]) {
-      partial_theta[i] <- partial_theta[i] + z[i]*(1/estimate_theta - D[i]/g[i]) + 
+      partial_theta[i] <- partial_theta[i] + 
+        z[i]*(1/estimate_theta - D[i]/g[i]) + 
         (1 - z[i])*(-1/(1 - estimate_theta) - D[i]/g[i])
-      partial_sigma2[i] <- partial_sigma2[i] + z[i]*(f1_partial_sigma2[i]/f1[i] - log_g_partial_sigma2[i]) + 
+      
+      partial_sigma2[i] <- partial_sigma2[i] + 
+        z[i]*(f1_partial_sigma2[i]/f1[i] - log_g_partial_sigma2[i]) + 
         (1 - z[i])*(f0_partial_sigma2[i]/f0[i] - log_g_partial_sigma2[i])
-      partial_beta[i,] <- partial_beta[i,] + z[i]*(f1_partial_beta[i,]/f1[i] - log_g_partial_beta[1,]) +
+      
+      partial_beta[i,] <- partial_beta[i,] + 
+        z[i]*(f1_partial_beta[i,]/f1[i] - log_g_partial_beta[i,]) +
         (1 - z[i])*(f0_partial_beta[i,]/f0[i] - log_g_partial_beta[i,])
+    } else {
+      next
     }
   }
   score <- cbind(partial_theta, partial_sigma2, partial_beta)
@@ -306,19 +306,32 @@ fisher_score <- function(data, estimate) {
   return(score)
 }
 
-EM_se <- function(data, estimate) {
+EM_se <- function(data, estimate, report_allparam = FALSE) {
   n <- nrow(data)
   fisher_score_ <- fisher_score(data, estimate)
   obs_fisher_info <- n * var(fisher_score_)
   EM_vcov <- solve(obs_fisher_info)
-  return(sqrt(diag(EM_vcov)))
+  
+  EM_all_se <- EM_vcov %>%
+    diag() %>%
+    sqrt()
+  
+  if (report_allparam) {
+    return(EM_all_se)
+  }
+  
+  idx <- grep('beta', names(EM_all_se), value = FALSE)
+  return(unname(EM_all_se[idx]))
 }
 
 ###############################
 # Bootstrap
 ###############################
 
-bootstrap <- function(B, model, data, method, tolerance, boot_verbose) {
+bootstrap <- function(B, model, data, method, boot_verbose, ...) {
+  if (!method %in% c("cc", "ipw", "em")) {
+    stop("undefined method")
+  }
   n <- dim(data)[1]
   boot_estimates <- matrix(nrow = B, ncol = 3)
   if (boot_verbose) {
@@ -329,19 +342,19 @@ bootstrap <- function(B, model, data, method, tolerance, boot_verbose) {
   for (b in 1:B) {
     if (boot_verbose) {pb$tick()}
     boot_data <- boot_sample(data)
+    
     if (method == "cc") {
       estimates <- unname(coef(lm(model, boot_data)))
     } else if (method == "ipw") {
       # estimates <- IPW(model, boot_data)
       ################# TODO: debug
       tryCatch(
-        expr = {estimates <- IPW(model, boot_data)},
+        expr = {estimates <- IPW(model, boot_data, ...)},
         error = function(e) {message("unknown source of error")}
       )
       #################
-      
     } else if (method == "em") {
-      estimates <- EM(tolerance, boot_data, verbose = FALSE, report_allparam = FALSE)
+      estimates <- EM(boot_data, ...)
     } else {
       estimates <- rep(NA, 3)
     }

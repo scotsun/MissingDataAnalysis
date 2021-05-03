@@ -1,7 +1,5 @@
 library(tidyverse)
 
-# TODO: update plot functions for the EM algorithm
-
 mse <- function(data, beta_hat) {
   data <- data[complete.cases(data),]
   y_hat <- beta_hat[1] + beta_hat[2]*data$x + beta_hat[3]*as.numeric(data$z)
@@ -61,8 +59,8 @@ plot_ipw_vs_full <- function(df.ods, df) {
   return(p)
 }
 
-plot_em_vs_full <- function(tolerance, df.ods, df, verbose) {
-  em.coef <- EM(tolerance, df.ods, verbose)
+plot_em_vs_full <- function(df.ods, df, ...) {
+  em.coef <- EM(df.ods, ...)
   df <- df %>% mutate(z = paste('full', z))
   df.full_lm <- lm(y ~ x + z, df)
   p <- ggplot() +
@@ -111,11 +109,22 @@ trace_plot_simulated_estimates <- function(parameter, simulation_df, alpha = 0.3
     p <- p + geom_line(alpha = alpha)
   }
   if (smooth_method == "loess") {
-    p <- p + geom_smooth(method = smooth_method, formula = 'y ~ x', se = FALSE, linetype = "dashed")
+    p <- p + geom_smooth(aes(linetype = approach), method = smooth_method, formula = 'y ~ x', se = FALSE)
   } else if (smooth_method == "lm") {
-    p <- p + geom_smooth(method = smooth_method, formula = 'y ~ 1', se = FALSE, linetype = "dashed")
+    p <- p + geom_smooth(aes(linetype = approach), method = smooth_method, formula = 'y ~ 1', se = FALSE)
   }
   p <- p + scale_colour_manual(values = c("red", "orange", "cornflowerblue", "chartreuse3")) +
     theme_bw()
   return(p)
+}
+
+coverage <- function(est_df, se_df, param) {
+  N <- dim(est_df)[1]
+  param_df <- data.frame(
+    cbind(rep(param[1], N), rep(param[2], N), rep(param[3], N))
+  )
+  colnames(param_df) <- c("b0", "b1", "b2")
+  l <- est_df - 1.96 * se_df
+  u <- est_df + 1.96 * se_df
+  ((param_df > l) & (param_df < u)) %>% apply(2, mean) 
 }

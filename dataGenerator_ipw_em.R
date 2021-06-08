@@ -17,12 +17,14 @@ theory_rSq_to_sigma <- function(beta, phi, theta, rSq) {
   return(drop(sqrt(var_explained * (1 - rSq)/rSq)))
 }
 
-generate_full_data <- function(beta0, beta, phi, theta, sigma, n, misspecified = FALSE) {
+generate_full_data <- function(beta0, beta, phi, theta, sigma, n, misspecified = FALSE,
+                               curvature_scale = NULL) {
   x <- rnorm(n, 0, phi)
   z <- rbinom(n, 1, theta)
   epsilon <- rnorm(n, 0, sigma)
   if (misspecified) {
-    y <- beta0 + beta[1]*(sin(x) + x) + beta[2]*z + epsilon # mis-specified the mean function
+    x_star <- curvature_scale*(x - phi)*(x + phi)*x + x 
+    y <- beta0 + beta[1]*x_star + beta[2]*z + epsilon
   } else {
     y <- beta0 + beta[1]*x + beta[2]*z + epsilon
   }

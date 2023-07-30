@@ -1,18 +1,17 @@
 ---
-title: "Compare and Constrast Maximum Likelihood Method and Inverse Probability Weighting Method in Missing Data Analysis"
-author: Scott Sun
+title: "Comparing Weighting Methods and Likelihood-based Methods in Two-Stage Sampling Design with Varied Degree of Data Missingness"
+author: 
+- Minghui Sun
+- Eric Reyes
 output: 
   pdf_document:
     includes:
       in_header: "title.tex"
+    keep_tex: true
 geometry: margin=1in
 fontsize: 12pt
 bibliography: write-up.bib
-nocite: '@*'
 ---
-\begin{center}
-{\fontsize{12}{14}\selectfont Advisor: Dr. Eric Reyes}
-\end{center}
 \vspace{1cm}
 \begin{center}
 \textbf{Abstract}
@@ -21,7 +20,6 @@ nocite: '@*'
 \textbf{Keyword}: Outcome-Dependent Sampling, Maximum Likelihood, Inverse Probability Weighting, EM Algorithm
 \vfill
 \begin{center}
-\includegraphics[width=5cm]{rhit.png}\par\vspace{0.5cm}
 {\fontsize{15}{18}\selectfont Rose-Hulman Institute of Technology}\par
 {\fontsize{15}{18}\selectfont Spring, 2021}
 \end{center}
@@ -30,6 +28,7 @@ nocite: '@*'
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 options(dplyr.summarise.inform = FALSE)
+options(knitr.kable.NA = '')
 library(kableExtra)
 library(tidyverse)
 library(patchwork)
@@ -41,13 +40,13 @@ simu90 <- read.csv('../simulation result/simu_estimate90.csv')
 ```
 
 ## 1 Introduction
-Consider a hypothetical study about the association between oxygen levels and the age of patients with COVID-19. Researchers may conduct it in two stages, sampling patients' ages and oxygen levels in the first stage. Based on the information obtained from the first stage, the researchers identify some elderly patients to be critically ill. Then, in the second stage, the researcher will collect detailed information such as medical history from these seriously ill patients. This hypothetical study is an example of an Outcome-Dependent Sampling (ODS) study, where data are collected in two stages. In the first stage, information is available on the response and some of the covariates for all observations. However, in the second stage, information is available on other covariates among only a subset of the sample (Zhao & Lipsitz, 1992). Further, the likelihood of observing an individual in the second stage can depend on data collected during the first stage. This sampling method allows researchers to concentrate resources on places with the most valuable information according to their topic (Weaver & Zhou, 2005). However, this unique design deliberately generates incomplete observations in the final dataset. Therefore, estimation of the parameters governing the model for the response requires the missing data to be appropriately addressed.
+Consider a hypothetical study about the association between oxygen levels and the age of patients with COVID-19. Researchers may conduct it in two stages, sampling patients' ages and oxygen levels in the first stage. Based on the information obtained from the first stage, the researchers identify some elderly patients to be critically ill. Then, in the second stage, the researcher will collect detailed information such as medical history from these seriously ill patients. This hypothetical study is an example of an Outcome-Dependent Sampling (ODS) study, where data are collected in two stages. In the first stage, information is available on the response and some of the covariates for all observations. However, in the second stage, information is available on other covariates among only a subset of the sample [@zhao]. Further, the likelihood of observing an individual in the second stage can depend on data collected during the first stage. This sampling method allows researchers to concentrate resources on places with the most valuable information according to their topic [@weaver]. However, this unique design deliberately generates incomplete observations in the final dataset. Therefore, estimation of the parameters governing the model for the response requires the missing data to be appropriately addressed.
 
-Among applied researchers, it is common only to retain complete cases when data is subject to missingness. This approach is called complete-case (CC) analysis, also known as case deletion and listwise deletion, and is usually the default in many software packages. It is admittedly straightforward to understand but not always justified since it may exclude potentially helpful information. In an ODS study, missingness has a systematic pattern and is intrinsic to the data collection, where the likelihood of observing a complete case varies among observations. Therefore, estimates directly obtained from the complete-case analysis can be biased and inefficient (Schafer & Graham, 2002).
+Among applied researchers, it is common only to retain complete cases when data is subject to missingness. This approach is called complete-case (CC) analysis, also known as case deletion and listwise deletion, and is usually the default in many software packages. It is admittedly straightforward to understand but not always justified since it may exclude potentially helpful information. In an ODS study, missingness has a systematic pattern and is intrinsic to the data collection, where the likelihood of observing a complete case varies among observations. Therefore, estimates directly obtained from the complete-case analysis can be biased and inefficient [@schafer].
 
-For general missing data problems, three primary methods have been developed as alternatives to the complete-case approach: Multiple Imputation, Maximum Likelihood (ML), and Inverse Probability Weighting (IPW) (Schafer & Graham, 2002). Multiple Imputation solves the missingness by creating different plausible versions of the data by imputing the missing values for multiple times and aggregating the results. ML estimation obtains the estimates directly by optimizing a likelihood function that incorporates the impact of the missingness. In the IPW approach, the analysis model is fitted only to the complete observations, but different weights are assigned to adjust individual contribution to the analysis based on the missingness structure.
+For general missing data problems, three primary methods have been developed as alternatives to the complete-case approach: Multiple Imputation, Maximum Likelihood (ML), and Inverse Probability Weighting (IPW) [@schafer]. Multiple Imputation solves the missingness by creating different plausible versions of the data by imputing the missing values for multiple times and aggregating the results. ML estimation obtains the estimates directly by optimizing a likelihood function that incorporates the impact of the missingness. In the IPW approach, the analysis model is fitted only to the complete observations, but different weights are assigned to adjust individual contribution to the analysis based on the missingness structure.
 
-In this paper, we only discuss ML and IPW; the Multiple Imputation method is outside the scope of this paper. Earlier works have compared various ML estimators and IPW estimators, with the ML methods tending to outperform the IPW methods in efficiency. However, Seaman et al. (2011) discuss ways to improve IPW estimators' efficiency by truncating the weights before assigning them to the corresponding observation. The previous works did not compare the ML estimators with estimators calculated by this improved version of the IPW method. Moreover, while the earlier works theorized on the result, they did not thoroughly compare the two methods when the mean response model is misspecified. Therefore, in this article, we would like to compare the ML estimators with the weight-stabilized IPW estimators in an Outcome-Dependent Sampling design under varied conditions. We will demonstrate the comparisons through numerical simulations.
+In this paper, we only discuss ML and IPW; the Multiple Imputation method is outside the scope of this paper. Earlier works have compared various ML estimators and IPW estimators, with the ML methods tending to outperform the IPW methods in efficiency. However, [@seaman] discuss ways to improve IPW estimators' efficiency by truncating the weights before assigning them to the corresponding observation. The previous works did not compare the ML estimators with estimators calculated by this improved version of the IPW method. Moreover, while the earlier works theorized on the result, they did not thoroughly compare the two methods when the mean response model is misspecified. Therefore, in this article, we would like to compare the ML estimators with the weight-stabilized IPW estimators in an Outcome-Dependent Sampling design under varied conditions. We will demonstrate the comparisons through numerical simulations.
 
 ## 2 Types of Missingness Mechanisms
 Missingness, or incompleteness, is usually represented by a matrix of Bernoulli random variables, $R$. Within the scope of this paper, $R$ is reduced as follows:
@@ -57,7 +56,7 @@ R_{i} = \begin{cases}
 0,~~~~\text{otherwise}
 \end{cases}
 $$
-It is dictated by the missingness mechanism, which is a part of the data generation process. The mechanism plays a crucial role in the study of missing-data analysis (Schafer & Graham, 2002). It helps to characterize the relationship between the missingness matrix and the original data matrix. There exist three types of missingness mechanisms: Missing Completely at Random (MCAR), Missing at Random (MAR), and Missing Not at Random (MNAR). In this paper, we will only discuss MCAR and MAR. 
+It is dictated by the missingness mechanism, which is a part of the data generation process. The mechanism plays a crucial role in the study of missing-data analysis [@schafer]. It helps to characterize the relationship between the missingness matrix and the original data matrix. There exist three types of missingness mechanisms: Missing Completely at Random (MCAR), Missing at Random (MAR), and Missing Not at Random (MNAR). In this paper, we will only discuss MCAR and MAR. 
 
 Let the data matrix $X = (x_{ij})$, which consists of $X_{mis}$, the missing variables, and $X_{obs}$, the observed variables. In a missing variable, some subjects are unobserved; however, in an observed variable, the value is observed for all observations. Moreover, let the missingness vector $R = (R_{1}, R_{2} \ldots R_{i} \ldots)$. Mathematically, the mechanism can be classified by the conditional distribution $f(R|X, \boldsymbol\Theta)$, where $\boldsymbol\Theta$ is an unknown parameter vector.
 
@@ -73,7 +72,7 @@ If the likelihood of being observed depends only on those fully observed variabl
 $$
 \Pr(R|X, \boldsymbol\Theta) = \Pr(R|X_{obs}, \boldsymbol\Theta).
 $$
-Compared to MCAR, MAR is a less constrained statement. Based on this definition, MCAR can be seen as an extreme, special case of MAR (Schafer & Graham, 2002). Due to the unique design of ODS, the missingness follows the pattern of MAR. The likelihood an observation is completely observed depends on data collected during the first stage, where all variables are fully observed.
+Compared to MCAR, MAR is a less constrained statement. Based on this definition, MCAR can be seen as an extreme, special case of MAR [@schafer]. Due to the unique design of ODS, the missingness follows the pattern of MAR. The likelihood an observation is completely observed depends on data collected during the first stage, where all variables are fully observed.
 
 ## 3 ODS Design and Likelihood Function
 
@@ -81,7 +80,7 @@ In Section 1, we described the data collection of an ODS study in general. Now, 
 
 We define $\boldsymbol{R}$ to indicate the completeness of the observations in the data set. Under this setting, $\boldsymbol{R}$ indicates if $\boldsymbol{Z}$ is obtained from the individuals. Thus, the missingness mechanism is MAR as $\boldsymbol{R}$ depends only one the observed variables. Let $S$ represent the index set of all individuals of complete observation, and let $\bar{S}$ represent the index set of all individuals whose $Z_i$ is missing where $i = 1,...,N$. That is, $S = \{i: R_i = 1\}$ and $\bar{S} = \{i: R_i = 0\}$.
 
-Zhao et al. (1992) discuss the likelihood function for two-stage case-control designs. In their setting, the response variable is binary, and the first predictor variable is discrete. However, the ODS design for continuous outcomes is comparable to the case-control design in terms of the missingness mechanism. The general expression of the observed likelihood function is invariant to variables' types and distributions. Therefore, the observed likelihood for a data set with this ODS design is
+@zhao discuss the likelihood function for two-stage case-control designs. In their setting, the response variable is binary, and the first predictor variable is discrete. However, the ODS design for continuous outcomes is comparable to the case-control design in terms of the missingness mechanism. The general expression of the observed likelihood function is invariant to variables' types and distributions. Therefore, the observed likelihood for a data set with this ODS design is
 $$
 L_{Obs}(\boldsymbol\Theta) = \prod_{i=1}^{N} \big[ f(y_i, x_i; \boldsymbol\Theta)f(z_i|y_i, x_i; \boldsymbol\Theta) \big]^{R_i} \big[ f(y_i, x_i; \boldsymbol\Theta) \big]^{1-R_i}
 $$
@@ -100,7 +99,7 @@ L_{CC}(\boldsymbol\Theta) &= \prod_{i \in S} \big[ f(y_i, x_i; \boldsymbol\Theta
 \end{aligned}
 $$
 
-Then, the CC analysis obtains $\hat{\boldsymbol\Theta}$ by maximizing $L_{CC}(\boldsymbol\Theta)$. There are a few circumstances where the CC analysis can yield valid estimators. When the missingness mechanism is MCAR, the estimator is generally unbiased and consistent because the completeness is independent of all variables in the data set. The complete cases can be viewed as random samples from an imagined full data set (Schafer & Graham, 2002; Seaman & White, 2011). In our specific ODS design notations, $\Pr(R = 1|X, Y; \boldsymbol\Theta) = \Pr(R = 1)$. Second, the CC analysis estimator can have negligible bias under a weaker condition: the missingness mechanism is MAR, but it is independent of the response variable given the observed predictor variables. This assumes the mean model is correctly specified (White & Carlin, 2010; Seaman & White, 2011). In our notations, $\Pr(R = 1|X, Y; \boldsymbol\Theta) = \Pr(R = 1 | X; \boldsymbol\Theta)$. 
+Then, the CC analysis obtains $\hat{\boldsymbol\Theta}$ by maximizing $L_{CC}(\boldsymbol\Theta)$. There are a few circumstances where the CC analysis can yield valid estimators. When the missingness mechanism is MCAR, the estimator is generally unbiased and consistent because the completeness is independent of all variables in the data set. The complete cases can be viewed as random samples from an imagined full data set [@schafer] [@seaman]. In our specific ODS design notations, $\Pr(R = 1|X, Y; \boldsymbol\Theta) = \Pr(R = 1)$. Second, the CC analysis estimator can have negligible bias under a weaker condition: the missingness mechanism is MAR, but it is independent of the response variable given the observed predictor variables. This assumes the mean model is correctly specified [@white] [@seaman]. In our notations, $\Pr(R = 1|X, Y; \boldsymbol\Theta) = \Pr(R = 1 | X; \boldsymbol\Theta)$. 
 
 In situations other than the two mentioned above, the CC analysis generally gives biased estimators. The ODS study design does not belong to the two scenarios since the missingness mechanism of MAR and the case completeness variable, $R_i$, depends on the outcome variable, $Y_i$, for all observations by definition. Therefore, the CC analysis will not be a preferable approach to address the data missingness for data sets generated using the ODS scheme.
 
@@ -114,21 +113,21 @@ I_n (\hat{\boldsymbol{\Theta}}) = n \cdot \mathrm{Cov}(\boldsymbol{y}, \boldsymb
 $$
 The standard error of $\hat\Theta_i$ is calculated by the square root of the i-th diagonal element of $I_n(\hat{\boldsymbol{\Theta}})^{-1}$. 
 
-However, the limitation of this parametric method is that it heavily relies on assumptions. If correct assumptions are provided, the ML estimators are efficient and fully utilizing the information from both stages (Zhao & Lipsitz, 1992). However, if some assumptions are incorrect (for instance, the response model is misspecified), this method has poor performance estimation and inference. Moreover, the EM algorithm is case-sensitive since it is closely related to the specific data set and its likelihood function. Thus, we have to develop a different corresponding EM algorithm for a data set with a dissimilar design and likelihood function.
+However, the limitation of this parametric method is that it heavily relies on assumptions. If correct assumptions are provided, the ML estimators are efficient and fully utilizing the information from both stages [@zhao]. However, if some assumptions are incorrect (for instance, the response model is misspecified), this method has poor performance estimation and inference. Moreover, the EM algorithm is case-sensitive since it is closely related to the specific data set and its likelihood function. Thus, we have to develop a different corresponding EM algorithm for a data set with a dissimilar design and likelihood function.
 
-Weaver et al. (2005) discuss semiparametric ML estimators, such as the Maximum Semiparametric Empirical Likelihood Estimator and the Maximum Estimated Likelihood Estimator, for ODS studies. The predictors' probability density functions are replaced by nonparametric estimated density functions in the observed likelihood functions in these methods. With fewer assumptions, the new likelihood functions can solve problems from a broader class of designs, where the predictor variables can be from any distribution.
+@weaver discuss semiparametric ML estimators, such as the Maximum Semiparametric Empirical Likelihood Estimator and the Maximum Estimated Likelihood Estimator, for ODS studies. The predictors' probability density functions are replaced by nonparametric estimated density functions in the observed likelihood functions in these methods. With fewer assumptions, the new likelihood functions can solve problems from a broader class of designs, where the predictor variables can be from any distribution.
 
 ### 4.3 Inverse Probability Weighting
 
-The IPW approach, unlike the parametric ML method, requires fewer assumptions: it only posits models for the mean of the response variable and the missingness mechanism. Different from the complete case analysis, the IPW method weights each individual in the complete sample by the inverse probability of being fully observed (Seaman & White, 2011). Instead of calculating $\hat{\boldsymbol{\Theta}}$ by optimizing the log-likelihood $l_{Obs}(\boldsymbol{\Theta})$, we obtain it by optimizing a weighted log-likelihood function (Weaver & Zhou, 2005). In our ODS design, the weighted log-likelihood function is
+The IPW approach, unlike the parametric ML method, requires fewer assumptions: it only posits models for the mean of the response variable and the missingness mechanism. Different from the complete case analysis, the IPW method weights each individual in the complete sample by the inverse probability of being fully observed [@seaman]. Instead of calculating $\hat{\boldsymbol{\Theta}}$ by optimizing the log-likelihood $l_{Obs}(\boldsymbol{\Theta})$, we obtain it by optimizing a weighted log-likelihood function [@weaver]. In our ODS design, the weighted log-likelihood function is
 $$
 l_{IPW}(\boldsymbol{\Theta}) = \sum_{i = 1}^{N} \frac{1}{p_i}R_i\cdot \log f(Y_i |X_i, Z_i; \boldsymbol\Theta)
 $$
 where $p_i$ is the probability to have the i-th observation be fully observed.
 
-The probability $p_i$ is estimated by using logistic regression. The logistic regression models the probability of complete observation given all the observed variables, $\Pr(R_i | X_i, Y_i)$ in our case. Weaver et al. (2005) prove that using the observed or estimated probability for weighting can generate more efficient estimators than using the known probability.
+The probability $p_i$ is estimated by using logistic regression. The logistic regression models the probability of complete observation given all the observed variables, $\Pr(R_i | X_i, Y_i)$ in our case. @weaver prove that using the observed or estimated probability for weighting can generate more efficient estimators than using the known probability.
 
-IPW, as a semiparametric method, is less constrained by assumptions for the predictor variables so that we can apply it to a broader range of problems. However, the estimator can be less efficient than the ML estimator when the model is well-specified (Schafer & Graham, 2002). The inefficiency is reflected by the IPW estimates' large standard errors. These large standard errors are generated as the complete cases can be assigned with large weights. Some people argue that the IPW estimates' high variability reflects the "genuine uncertainty" about the data (Seaman & White, 2011).
+IPW, as a semiparametric method, is less constrained by assumptions for the predictor variables so that we can apply it to a broader range of problems. However, the estimator can be less efficient than the ML estimator when the model is well-specified [@schafer]. The inefficiency is reflected by the IPW estimates' large standard errors. These large standard errors are generated as the complete cases can be assigned with large weights. Some people argue that the IPW estimates' high variability reflects the "genuine uncertainty" about the data [@seaman].
 
 There are several ways to handle the large weights and thus stabilize the estimator. In this paper, we only discuss the weight truncation method. In weight truncation, a maximum bound is selected. Then, all the weights beyond this value will be set equal to it. As a result, we ensure a few individual observations do not excessively influence the analysis model.
 
@@ -151,13 +150,13 @@ The parameter that defines the full data set is $\boldsymbol\Theta = (\theta, \p
 
 ### 5.2 Simulation Result
 
-We generate 5,000 replications. We set $N = 100$, $(\theta, \phi, \beta_0, \beta_1, \beta_2) = (0.5, 5, 0, 0.5, 2)$, $(\gamma_1, \gamma_2, \gamma_3) = (1, 1, 1)$, and $R_{\mathrm{latent}}^2 = 0.60$. We choose two values for $R_{\mathrm{theory}}^2$: 0.30 and 0.90. We assume that the variables follow the same linear response model defined in Section 5.1. All the estimators rely on this assumption. In Tables 1 and 2, the first column lists the results of estimating $\beta_0$, $\beta_1$, and $\beta_2$ using the least-squares estimator with all the observations in the full data set. The other three columns list the results of estimating the parameter using different analysis methods with the ODS-designed data set. The second column lists the results of the CC analysis, the third column lists the results of the IPW method, and the fourth column lists the results of the ML method using the EM algorithm. We also examined the coverage rate of each estimator's 95 percent confidence interval (CI). It's defined as the proportion of CIs capturing the true parameter over the 5,000 iterations. For a 95 percent CI, ideally, we should expect the coverage rate falls in $[0.936, 0.964]$ (Zhao & Lipsitz, 1992).
+We generate 5,000 replications. We set $N = 100$, $(\theta, \phi, \beta_0, \beta_1, \beta_2) = (0.5, 5, 0, 0.5, 2)$, $(\gamma_1, \gamma_2, \gamma_3) = (1, 1, 1)$, and $R_{\mathrm{latent}}^2 = 0.60$. We choose two values for $R_{\mathrm{theory}}^2$: 0.30 and 0.90. We assume that the variables follow the same linear response model defined in Section 5.1. All the estimators rely on this assumption. In Tables 1 and 2, the first column lists the results of estimating $\beta_0$, $\beta_1$, and $\beta_2$ using the least-squares estimator with all the observations in the full data set. The other three columns list the results of estimating the parameter using different analysis methods with the ODS-designed data set. The second column lists the results of the CC analysis, the third column lists the results of the IPW method, and the fourth column lists the results of the ML method using the EM algorithm. We also examined the coverage rate of each estimator's 95 percent confidence interval (CI). It's defined as the proportion of CIs capturing the true parameter over the 5,000 iterations. For a 95 percent CI, ideally, we should expect the coverage rate falls in $[0.936, 0.964]$ [@zhao].
 
 The results in Table 1 allow a discussion about how the signal-to-noise ratio in the response model influences the various estimators' performance. The ML estimator performs well for both $R_{\mathrm{theory}}^2$ values. Its results are the closest to the results from the least-squares estimator using the full data set, which is the "best" estimator. On the other hand, the IPW estimator is the least stable among the three. When $R_{\mathrm{theory}}^2 = 0.30$, it tends to outperform CC estimator as it is less biased and has higher coverage for $\beta_0$ and $\beta_1$. However, When $R_{\mathrm{theory}}^2 = 0.90$, the CC estimator outperforms the IPW estimator since both methods are unbiased and the CC estimator has higher coverage rates for all three parameters. In this scenario, it has an outstanding performance even in an ODS design, seemingly contradicting our prior knowledge in Section 4.1. Nevertheless, In fact, the high $R_{\mathrm{theory}}^2$ conceals the impact of the missingness because, in this case, $Y$ has an extremely strong relationship with $X$ and $Z$. With a high $R_{\mathrm{theory}}^2$, even a few data records can generate valid estimates. 
 
 We can obtain the same observations from the estimates' density plots in Figure 1. For both $R_{\mathrm{theory}}^2$ values, the ML estimates' distributions mix well with the full data least-squares estimates'. CC analysis tends to be the most biased method since the estimates' distributions deviate the most from the full data least-squares estimates'. IPW tends to be the most unstable method since the estimates' distributions are the most heavy-tailed.
 
-```{r, echo=FALSE, fig.asp=0.6, fig.width=10, fig.align="center", fig.cap="Density plots of the simulation results for estimating the parameters in the linear model $Y_i = \\beta_0 + \\beta_1 X_i + \\beta_2 Z_i + \\epsilon_i$, where $i = 1,...,100$, $X_i \\overset{IID}{\\sim} N(0, \\phi^2)$, $Z_i \\overset{IID}{\\sim} Bernoulli(\\theta)$, and $\\epsilon_i \\overset{IID}{\\sim} N(0, \\sigma^2)$. The true parameters values are $(\\theta, \\phi, \\beta_0, \\beta_1, \\beta_2) = (0.4, 5, 0, 0.5, 2)$, $(\\gamma_0, \\gamma_1, \\gamma_2) = (1, 1, 1)$, $R_{\\mathrm{latent}}^2 = 0.60$ and $R_{\\mathrm{theory}}^2 = 0.30 \\text{ or } 0.90$. The vertical lines represent the sample mean of the estimates over 5,000 replications."}
+```{r sampldist, echo=FALSE, fig.asp=0.6, fig.width=10, fig.align="center", fig.cap="Density plots of the simulation results for estimating the parameters in the linear model $Y_i = \\beta_0 + \\beta_1 X_i + \\beta_2 Z_i + \\epsilon_i$, where $i = 1,...,100$, $X_i \\overset{IID}{\\sim} N(0, \\phi^2)$, $Z_i \\overset{IID}{\\sim} Bernoulli(\\theta)$, and $\\epsilon_i \\overset{IID}{\\sim} N(0, \\sigma^2)$. The true parameters values are $(\\theta, \\phi, \\beta_0, \\beta_1, \\beta_2) = (0.4, 5, 0, 0.5, 2)$, $(\\gamma_0, \\gamma_1, \\gamma_2) = (1, 1, 1)$, $R_{\\mathrm{latent}}^2 = 0.60$ and $R_{\\mathrm{theory}}^2 = 0.30 \\text{ or } 0.90$. The vertical lines represent the sample mean of the estimates over 5,000 replications."}
 density_plot_simulated_estimates("b0", simu30) + 
   labs(y = expression(widehat(beta)[0]), x = "",
        title = expression(paste(R["theory"]^2, " = 0.30"))) +
@@ -185,13 +184,20 @@ density_plot_simulated_estimates("b0", simu30) +
 
 ```{r, echo=FALSE}
 wellspec %>%
-  mutate_all(replace_na, '') %>%
   mutate_at(vars(full.data, cc, ipw, ml), as.numeric) %>%
-kbl(caption = "Simulation results of estimating the parameters in the linear model $Y_i = \\beta_0 + \\beta_1 X_i + \\beta_2 Z_i + \\epsilon_i$, where $i = 1,...,100$, $X_i \\overset{IID}{\\sim} N(0, \\phi^2)$, $Z_i \\overset{IID}{\\sim} Bernoulli(\\theta)$, and $\\epsilon_i \\overset{IID}{\\sim} N(0, \\sigma^2)$. The true parameters values are $(\\theta, \\phi, \\beta_0, \\beta_1, \\beta_2) = (0.4, 5, 0, 0.5, 2)$, $(\\gamma_0, \\gamma_1, \\gamma_2) = (1, 1, 1)$, $R_{\\mathrm{latent}}^2 = 0.60$ and $R_{\\mathrm{theory}}^2 = 0.30 \\text{ or } 0.90$. Results in the first column are calculated using the full data set. Results in the last three columns are based on the ODS data set. They are from the complete case analysis, from IPW with 20 as the truncation bound, and from the maximum likelihood method using the EM algorithm. In each row group, the first row contains the sample means of the estimates over 5,000 replications, the second row contains the sample standard deviation, and the third row contains the coverage rate, the proportion of the 95 percent CIs capturing the true parameter",
+  kbl(
+    caption = "Simulation results of estimating the parameters in the linear model $Y_i = \\beta_0 + \\beta_1 X_i + \\beta_2 Z_i + \\epsilon_i$, where $i = 1,...,100$, $X_i \\overset{IID}{\\sim} N(0, \\phi^2)$, $Z_i \\overset{IID}{\\sim} Bernoulli(\\theta)$, and $\\epsilon_i \\overset{IID}{\\sim} N(0, \\sigma^2)$. The true parameters values are $(\\theta, \\phi, \\beta_0, \\beta_1, \\beta_2) = (0.4, 5, 0, 0.5, 2)$, $(\\gamma_0, \\gamma_1, \\gamma_2) = (1, 1, 1)$, $R_{\\mathrm{latent}}^2 = 0.60$ and $R_{\\mathrm{theory}}^2 = 0.30 \\text{ or } 0.90$. Results in the first column are calculated using the full data set. Results in the last three columns are based on the ODS data set. They are from the complete case analysis, from IPW with 20 as the truncation bound, and from the maximum likelihood method using the EM algorithm. In each row group, the first row contains the sample means of the estimates over 5,000 replications, the second row contains the sample standard deviation, and the third row contains the coverage rate, the proportion of the 95 percent CIs capturing the true parameter",
     booktabs = T,
     digits = 3,
-    col.names = c("$R_{\\mathrm{theory}}^{2}$", "Full Data", "CC", "IPW", "ML (EM)"),
-    escape = F) %>%
+    col.names = c(
+      "$R_{\\mathrm{theory}}^{2}$",
+      "Full Data",
+      "CC",
+      "IPW",
+      "ML (EM)"
+    ),
+    escape = F
+  ) %>%
   kable_styling(latex_options = "HOLD_position") %>%
   add_header_above(c(" " = 2, "Analysis Methods" = 3)) %>%
   pack_rows("$\\\\beta_0 = 0$", 1, 6, escape = F) %>%
@@ -217,7 +223,6 @@ We generate 5,000 replications of random full data sets and their corresponding 
 
 ```{r, echo=FALSE}
 misspec %>%
-  mutate_all(replace_na, '') %>%
   mutate_at(vars(full.data, cc, ipw, ml), as.numeric) %>%
 kbl(caption = "Simulation results of estimating only $\\beta_2$ when $R_{\\mathrm{theory}}^2 = 0.30 \\text{ or } 0.90$, where both model well-specified scenario and model misspecified scenarios are included. The value of the parameter is 2. The four columns list the results from different analysis methods. Results in the first column are calculated using the full data set. Results in the last three columns are based on the ODS data set. They are from the complete case analysis, from IPW with 20 as the truncation bound, and from the maximum likelihood method using the EM algorithm. In each row group, the first row contains the sample means of $\\hat{\\beta_2}$ over 5,000 replications, the second row contains the of $\\mathrm{MSE}(\\hat{\\beta_2})$.",
     booktabs = T,
@@ -239,7 +244,7 @@ The results in Tables 2 allow a discussion about how the misspecification influe
 
 Our simulation results corroborate the results from the previous work. In an ODS study, CC analysis can be reliable only when the response variable has a strong relationship with the predictor variables. The ML method achieves its ideal performance when our assumption about the response model is valid. Once the assumption is incorrect, the estimator can be highly biased and inefficient since the EM algorithm is sensitive. Moreover, no software package supports the EM algorithm by default, and the development of the algorithm requires a considerable amount of time and effort. On the other hand, the IPW approach, although not ideally unbiased and efficient as the ML method, is easy to implement in many software packages. Therefore, from our limited experience, we make the following recommendations. Unless there is evidence that the response variable has a perfect relationship with the predictor variables, CC analysis does not correctly address the missingness. Instead, IPW can be used as an improvised method. After thoroughly learning the data set, we can use the ML method and develop an EM algorithm to calculate the estimates.
 
-Several extensions of the design and methods are worth mentioning. The first extension is to compare and contrast IPW and EM estimators' efficiency using bootstrapping. The case resampling process must be stratified to maintain the degree of missingness in each bootstrapped data set. Another extension is to explore the poor coverage rate of the IPW estimator. In our simulation results, the 95 percent CI coverage rates of the IPW estimates do not fall into $[0.936, 0.964]$. However, Weaver et al. (2005) have the IPW estimators achieve reasonable coverage rates in their ODS design. The reason for the difference is that the IPW estimates standard errors we use are directly from the software package by default, which is commonly used in practice. However, these values are not theoretically correct. Therefore, we need to develop our own functions to compute the theoretical standard errors.
+Several extensions of the design and methods are worth mentioning. The first extension is to compare and contrast IPW and EM estimators' efficiency using bootstrapping. The case resampling process must be stratified to maintain the degree of missingness in each bootstrapped data set. Another extension is to explore the poor coverage rate of the IPW estimator. In our simulation results, the 95 percent CI coverage rates of the IPW estimates do not fall into $[0.936, 0.964]$. However, @weaver have the IPW estimators achieve reasonable coverage rates in their ODS design. The reason for the difference is that the IPW estimates standard errors we use are directly from the software package by default, which is commonly used in practice. However, these values are not theoretically correct. Therefore, we need to develop our own functions to compute the theoretical standard errors.
 
 
 ## Appendix

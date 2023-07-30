@@ -1,0 +1,32 @@
+\begin{thebibliography}{1}
+
+\bibitem{schafer}
+Joseph~L Schafer and John~W Graham.
+\newblock Missing data: our view of the state of the art.
+\newblock {\em Psychological methods}, 7(2):147, 2002.
+
+\bibitem{seaman}
+Shaun~R Seaman and Ian~R White.
+\newblock Review of inverse probability weighting for dealing with missing
+  data.
+\newblock {\em Statistical methods in medical research}, 22(3):278--295, 2013.
+
+\bibitem{weaver}
+Mark~A Weaver and Haibo Zhou.
+\newblock An estimated likelihood method for continuous outcome regression
+  models with outcome-dependent sampling.
+\newblock {\em Journal of the American Statistical Association},
+  100(470):459--469, 2005.
+
+\bibitem{white}
+Ian~R White and John~B Carlin.
+\newblock Bias and efficiency of multiple imputation compared with
+  complete-case analysis for missing covariate values.
+\newblock {\em Statistics in medicine}, 29(28):2920--2931, 2010.
+
+\bibitem{zhao}
+LP~Zhao and S~Lipsitz.
+\newblock Designs and analysis of two-stage studies.
+\newblock {\em Statistics in medicine}, 11(6):769--782, 1992.
+
+\end{thebibliography}
